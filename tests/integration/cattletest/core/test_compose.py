@@ -277,16 +277,10 @@ def test_args(client, compose):
         devVda = launch_config.blkioDeviceOptions['/dev/vda']
         assert _convert_instance(devNull) == {
             'readBps': 4000,
-            'readIops': None,
-            'weight': None,
             'writeBps': 200,
-            'writeIops': None
         }
         assert _convert_instance(devVda) == {
-            'readBps': None,
             'readIops': 2000,
-            'weight': None,
-            'writeBps': None,
             'writeIops': 3000
         }
         assert launch_config.groupAdd == ['root']

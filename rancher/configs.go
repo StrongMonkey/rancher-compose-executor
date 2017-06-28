@@ -10,7 +10,7 @@ import (
 	"github.com/docker/libcompose/utils"
 	"github.com/rancher/go-rancher/v2"
 	"github.com/rancher/rancher-compose-executor/config"
-	"github.com/rancher/rancher-compose-executor/convert"
+	"github.com/rancher/rancher-compose-executor/transform"
 	"github.com/rancher/rancher-compose-executor/yaml"
 )
 
@@ -50,11 +50,6 @@ func createLaunchConfigs(r *RancherService) (client.LaunchConfig, []client.Secon
 }
 
 func createLaunchConfig(r *RancherService, name string, serviceConfig *config.ServiceConfig) (client.LaunchConfig, error) {
-	var result client.LaunchConfig
-
-	schemasUrl := strings.SplitN(r.Context().Client.GetSchemas().Links["self"], "/schemas", 2)[0]
-	scriptsUrl := schemasUrl + "/scripts/transform"
-
 	tempImage := serviceConfig.Image
 	tempLabels := serviceConfig.Labels
 	newLabels := yaml.SliceorMap{}
@@ -62,7 +57,7 @@ func createLaunchConfig(r *RancherService, name string, serviceConfig *config.Se
 		// Lookup default load balancer image
 		lbImageSetting, err := r.Client().Setting.ById("lb.instance.image")
 		if err != nil {
-			return result, err
+			return client.LaunchConfig{}, err
 		}
 		serviceConfig.Image = lbImageSetting.Value
 
@@ -75,33 +70,18 @@ func createLaunchConfig(r *RancherService, name string, serviceConfig *config.Se
 		serviceConfig.Labels = newLabels
 	}
 
-	config, hostConfig, err := convert.Convert(serviceConfig, r.context.Context)
+	result, err := transform.Transform(serviceConfig, &r.context.Context)
 	if err != nil {
-		return result, err
+		return client.LaunchConfig{}, err
 	}
 
 	serviceConfig.Image = tempImage
 	serviceConfig.Labels = tempLabels
 
-	dockerContainer := &ContainerInspect{
-		Config:     config,
-		HostConfig: hostConfig,
-	}
-
-	dockerContainer.HostConfig.NetworkMode = container.NetworkMode("")
-	dockerContainer.Name = "/" + name
-
-	err = r.Context().Client.Post(scriptsUrl, dockerContainer, &result)
-	if err != nil {
-		return result, err
-	}
-
-	result.VolumeDriver = hostConfig.VolumeDriver
-
 	setupNetworking(serviceConfig.NetworkMode, &result)
 	setupVolumesFrom(serviceConfig.VolumesFrom, &result)
 
-	if err = setupBuild(r, name, &result, serviceConfig); err != nil {
+	if err := setupBuild(r, name, &result, serviceConfig); err != nil {
 		return result, err
 	}
 	if err = setupSecrets(r, name, &result, serviceConfig); err != nil {
