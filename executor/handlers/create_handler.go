@@ -39,6 +39,12 @@ func createStack(logger *logrus.Entry, event *events.Event, apiClient *client.Ra
 		return errors.New("Failed to find stack")
 	}
 
+	if stack.Templates != nil {
+		if compose, ok := stack.Templates["compose.yml"]; ok {
+			stack.DockerCompose = compose.(string)
+			stack.RancherCompose = ""
+		}
+	}
 	if stack.DockerCompose == "" {
 		return emptyReply(event, apiClient)
 	}

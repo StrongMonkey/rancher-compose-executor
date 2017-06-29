@@ -35,15 +35,45 @@ func (p *RancherProjectFactory) Create(c *cli.Context) (*project.Project, error)
 		Args:       c.Args(),
 	}
 
-	Populate(&context.Context, c)
-
-	rancherComposeFile, err := resolveRancherCompose(context.ComposeFiles[0],
-		c.GlobalString("rancher-file"))
-	if err != nil {
-		return nil, err
+	for _, v := range c.GlobalStringSlice("file") {
+		context.ComposeFiles = append(context.ComposeFiles, strings.Split(v, string(os.PathListSeparator))...)
 	}
 
-	qLookup, err := lookup.NewQuestionLookup(rancherComposeFile, &lookup.OsEnvLookup{})
+	templateFile := ""
+	if len(context.ComposeFiles) == 0 {
+		if _, err := os.Stat("compose.yml"); err == nil {
+			context.ComposeFiles = []string{"compose.yml"}
+			p, err := filepath.Abs("compose.yml")
+			if err != nil {
+				return nil, err
+			}
+			templateFile = p
+		} else {
+			context.ComposeFiles = []string{"docker-compose.yml"}
+			if _, err := os.Stat("docker-compose.override.yml"); err == nil {
+				context.ComposeFiles = append(context.ComposeFiles, "docker-compose.override.yml")
+			}
+			rancherComposeFile, err := resolveRancherCompose(context.ComposeFiles[0],
+				c.GlobalString("rancher-file"))
+			if err != nil {
+				return nil, err
+			}
+			context.ComposeFiles = append(context.ComposeFiles, rancherComposeFile)
+			templateFile = rancherComposeFile
+		}
+	} else {
+		rancherComposeFile, err := resolveRancherCompose(context.ComposeFiles[0],
+			c.GlobalString("rancher-file"))
+		if err != nil {
+			return nil, err
+		}
+		context.ComposeFiles = append(context.ComposeFiles, rancherComposeFile)
+		templateFile = rancherComposeFile
+	}
+
+	context.ProjectName = c.GlobalString("project-name")
+
+	qLookup, err := lookup.NewQuestionLookup(templateFile, &lookup.OsEnvLookup{})
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +84,6 @@ func (p *RancherProjectFactory) Create(c *cli.Context) (*project.Project, error)
 	}
 
 	context.EnvironmentLookup = envLookup
-	context.ComposeFiles = append(context.ComposeFiles, rancherComposeFile)
 
 	context.Upgrade = c.Bool("upgrade") || c.Bool("force-upgrade")
 	context.ForceUpgrade = c.Bool("force-upgrade")
@@ -76,26 +105,6 @@ func resolveRancherCompose(composeFile, rancherComposeFile string) (string, erro
 		return path.Join(path.Dir(f), "rancher-compose.yml"), nil
 	}
 	return rancherComposeFile, nil
-}
-
-func Populate(context *project.Context, c *cli.Context) {
-	// urfave/cli does not distinguish whether the first string in the slice comes from the envvar
-	// or is from a flag. Worse off, it appends the flag values to the envvar value instead of
-	// overriding it. To ensure the multifile envvar case is always handled, the first string
-	// must always be split. It gives a more consistent behavior, then, to split each string in
-	// the slice.
-	for _, v := range c.GlobalStringSlice("file") {
-		context.ComposeFiles = append(context.ComposeFiles, strings.Split(v, string(os.PathListSeparator))...)
-	}
-
-	if len(context.ComposeFiles) == 0 {
-		context.ComposeFiles = []string{"docker-compose.yml"}
-		if _, err := os.Stat("docker-compose.override.yml"); err == nil {
-			context.ComposeFiles = append(context.ComposeFiles, "docker-compose.override.yml")
-		}
-	}
-
-	context.ProjectName = c.GlobalString("project-name")
 }
 
 type ProjectAction func(project *project.Project, c *cli.Context) error
