@@ -52,6 +52,25 @@ func stackUp(event *events.Event, apiClient *client.RancherClient, forceUp bool)
 		return err
 	}
 
+	if stack.Prune {
+		existingServices := map[string]*client.Service{}
+		for _, serviceId := range stack.ServiceIds {
+			service, err := apiClient.Service.ById(serviceId)
+			if err != nil {
+				return err
+			}
+			existingServices[service.Name] = service
+		}
+		for name, svc := range existingServices {
+			if _, ok := project.Config.Services[name]; !ok {
+				logrus.Infof("Pruning stack now. Deleting service %v", name)
+				if err := apiClient.Service.Delete(svc); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
 	publishTransitioningReply("Creating stack", event, apiClient, false)
 
 	defer keepalive(event, apiClient)()
