@@ -57,25 +57,27 @@ func convert(w http.ResponseWriter, client *v3.RancherClient, input convertOptio
 // StackData is the metadata for exporting compose file for a stack. All maps use resource.id as its ley except volumeTemplates,
 // which uses its name.
 type StackData struct {
-	StackName            string
-	Services             map[string]v3.Service
-	StandaloneContainers map[string]v3.Container
-	VolumeTemplates      map[string]v3.VolumeTemplate
-	Certificates         map[string]v3.Certificate
-	PortRuleServices     map[string]v3.Service
-	PortRuleContainers   map[string]v3.Container
-	Secrets              map[string]v3.Secret
+	StackName                     string
+	Services                      map[string]v3.Service
+	StandaloneContainers          map[string]v3.Container
+	StandaloneContainersRevisions map[string]v3.Service
+	VolumeTemplates               map[string]v3.VolumeTemplate
+	Certificates                  map[string]v3.Certificate
+	PortRuleServices              map[string]v3.Service
+	PortRuleContainers            map[string]v3.Container
+	Secrets                       map[string]v3.Secret
 }
 
 func GetStackData(client *v3.RancherClient, stackID string) (StackData, error) {
 	stackData := StackData{
-		Services:             map[string]v3.Service{},
-		StandaloneContainers: map[string]v3.Container{},
-		VolumeTemplates:      map[string]v3.VolumeTemplate{},
-		Certificates:         map[string]v3.Certificate{},
-		PortRuleServices:     map[string]v3.Service{},
-		PortRuleContainers:   map[string]v3.Container{},
-		Secrets:              map[string]v3.Secret{},
+		Services:                      map[string]v3.Service{},
+		StandaloneContainers:          map[string]v3.Container{},
+		StandaloneContainersRevisions: map[string]v3.Service{},
+		VolumeTemplates:               map[string]v3.VolumeTemplate{},
+		Certificates:                  map[string]v3.Certificate{},
+		PortRuleServices:              map[string]v3.Service{},
+		PortRuleContainers:            map[string]v3.Container{},
+		Secrets:                       map[string]v3.Secret{},
 	}
 
 	stack, err := client.Stack.ById(stackID)
@@ -104,8 +106,13 @@ func GetStackData(client *v3.RancherClient, stackID string) (StackData, error) {
 		},
 	})
 	for _, container := range containers.Data {
-		if container.ServiceId == "" {
+		if container.ServiceId == "" && container.RevisionId != "" {
+			revision, err := client.Revision.ById(container.RevisionId)
+			if err != nil {
+				return StackData{}, err
+			}
 			stackData.StandaloneContainers[container.Id] = container
+			stackData.StandaloneContainersRevisions[container.Id] = *revision.Config
 		}
 	}
 
@@ -230,7 +237,7 @@ func createCombinedComposeData(stackData StackData) (string, error) {
 	}
 
 	// for standalone container export
-	for _, container := range stackData.StandaloneContainers {
+	for id, container := range stackData.StandaloneContainers {
 		containerConfig := &config.ServiceConfig{}
 		// volume convert
 		convertVolume(containerConfig, volumeConfig, container.DataVolumes, container.VolumeDriver, stackData.VolumeTemplates)
@@ -238,9 +245,17 @@ func createCombinedComposeData(stackData StackData) (string, error) {
 		//secret convert
 		convertSecret(containerConfig, secretConfig, container.Secrets, stackData.Secrets)
 
-		// container export
-		mergeDockerComposeStandalone(containerConfig, container)
-		mergeRancherComposeStandalone(containerConfig, container)
+		revisionService := stackData.StandaloneContainersRevisions[id]
+		if revisionService.LaunchConfig == nil {
+			// the standalone container is a native container and doesn't have launchConfig. Skip
+			continue
+		}
+		// docker-compose
+		mergeDockerCompose(containerConfig, *revisionService.LaunchConfig, revisionService, stackData.StackName)
+
+		//rancher-compose
+		mergeRancherCompose(containerConfig, revisionService, *revisionService.LaunchConfig, stackData.Certificates, stackData.PortRuleServices, stackData.PortRuleContainers)
+
 		compose.Containers[container.Name] = containerConfig
 	}
 
@@ -290,7 +305,7 @@ func createSplitComposeData(stackData StackData) (string, string, error) {
 	}
 
 	// for standalone container export
-	for _, container := range stackData.StandaloneContainers {
+	for id, container := range stackData.StandaloneContainers {
 		containerDockerConfig := &config.ServiceConfig{}
 		containerRancherConfig := &config.ServiceConfig{}
 		// volume convert
@@ -299,9 +314,16 @@ func createSplitComposeData(stackData StackData) (string, string, error) {
 		//secret convert
 		convertSecret(containerDockerConfig, secretConfig, container.Secrets, stackData.Secrets)
 
-		// container export
-		mergeDockerComposeStandalone(containerDockerConfig, container)
-		mergeRancherComposeStandalone(containerRancherConfig, container)
+		revisionService := stackData.StandaloneContainersRevisions[id]
+		if revisionService.LaunchConfig == nil {
+			// the standalone container is a native container and doesn't have launchConfig. Skip
+			continue
+		}
+		// docker-compose
+		mergeDockerCompose(containerDockerConfig, *revisionService.LaunchConfig, revisionService, stackData.StackName)
+
+		//rancher-compose
+		mergeRancherCompose(containerRancherConfig, revisionService, *revisionService.LaunchConfig, stackData.Certificates, stackData.PortRuleServices, stackData.PortRuleContainers)
 		dockerCompose.Containers[container.Name] = containerDockerConfig
 		rancherCompose.Containers[container.Name] = containerRancherConfig
 	}

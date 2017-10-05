@@ -435,20 +435,25 @@ func (s *ConvertTestSuite) TestConvertCombined(c *check.C) {
 
 func (s *ConvertTestSuite) TestConvertStandaloneContainer(c *check.C) {
 	container := v3.Container{}
-	container.Image = "strongmonkey/test"
-	container.RetainIp = true
-	container.Name = "strongmonkey"
 	container.Id = "test"
+	service := v3.Service{}
+	service.LaunchConfig = &v3.LaunchConfig{
+		Image:    "strongmonkey/test",
+		RetainIp: true,
+		Name:     "strongmonkey",
+	}
 	stackData := StackData{
-		Services:             map[string]v3.Service{},
-		StandaloneContainers: map[string]v3.Container{},
-		VolumeTemplates:      map[string]v3.VolumeTemplate{},
-		Certificates:         map[string]v3.Certificate{},
-		PortRuleServices:     map[string]v3.Service{},
-		PortRuleContainers:   map[string]v3.Container{},
-		Secrets:              map[string]v3.Secret{},
+		Services:                      map[string]v3.Service{},
+		StandaloneContainers:          map[string]v3.Container{},
+		StandaloneContainersRevisions: map[string]v3.Service{},
+		VolumeTemplates:               map[string]v3.VolumeTemplate{},
+		Certificates:                  map[string]v3.Certificate{},
+		PortRuleServices:              map[string]v3.Service{},
+		PortRuleContainers:            map[string]v3.Container{},
+		Secrets:                       map[string]v3.Secret{},
 	}
 	stackData.StandaloneContainers[container.Id] = container
+	stackData.StandaloneContainersRevisions[container.Id] = service
 	_, _, compose, err := createComposeData(stackData, "combined")
 	if err != nil {
 		c.Fatal(err)
