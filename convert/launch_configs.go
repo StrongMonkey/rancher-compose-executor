@@ -18,7 +18,10 @@ const (
 func createLaunchConfigs(project *project.Project, name string) (client.LaunchConfig, []client.LaunchConfig, error) {
 	serviceConfig, ok := project.Config.Services[name]
 	if !ok {
-		return client.LaunchConfig{}, nil, fmt.Errorf("Failed to find service config for %s", name)
+		serviceConfig, ok = project.Config.Containers[name]
+		if !ok {
+			return client.LaunchConfig{}, nil, fmt.Errorf("Failed to find service config for %s", name)
+		}
 	}
 	secondaryLaunchConfigs := []client.LaunchConfig{}
 	launchConfig, err := createLaunchConfig(project, *serviceConfig)

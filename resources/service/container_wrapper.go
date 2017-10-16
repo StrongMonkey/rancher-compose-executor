@@ -29,7 +29,7 @@ func (s *ContainerWrapper) Create(ctx context.Context, options options.Options) 
 		return err
 	}
 
-	logrus.Debugf("Creating service %s", s.name)
+	logrus.Debugf("Creating container %s", s.name)
 	container, err = s.project.Client.Container.Create(container)
 	if err != nil {
 		return err

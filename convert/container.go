@@ -19,6 +19,9 @@ func Container(p *project.Project, name string) (*client.Container, error) {
 		return nil, err
 	}
 
+	container.Name = name
+	container.StackId = p.Stack.Id
+
 	container.PidContainerId, err = resolveContainerReference(p, container.PidMode, container.PidContainerId)
 	if err != nil {
 		return nil, err
