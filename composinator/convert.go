@@ -398,63 +398,7 @@ func mergeDockerCompose(serviceConfig *config.ServiceConfig, launchConfig v3.Lau
 	convertUlimit(serviceConfig, launchConfig)
 	convertRestartPolicy(serviceConfig, launchConfig)
 	convertBlkioOptions(serviceConfig, launchConfig)
-}
-
-func mergeDockerComposeStandalone(serviceConfig *config.ServiceConfig, container v3.Container) {
-	serviceConfig.Image = container.Image
-	serviceConfig.Command = container.Command
-	serviceConfig.Ports = container.Ports
-	// todo: check volumeFrom
-	serviceConfig.VolumesFrom = container.DataVolumesFrom
-	serviceConfig.DNS = container.Dns
-	serviceConfig.CapAdd = container.CapAdd
-	serviceConfig.CapDrop = container.CapDrop
-	serviceConfig.DNSSearch = container.DnsSearch
-	serviceConfig.WorkingDir = container.WorkingDir
-	serviceConfig.Entrypoint = container.EntryPoint
-	serviceConfig.User = container.User
-	serviceConfig.Hostname = container.Hostname
-	serviceConfig.DomainName = container.DomainName
-	serviceConfig.MemLimit = yaml.MemStringorInt(container.Memory)
-	serviceConfig.MemReservation = yaml.MemStringorInt(container.MemoryReservation)
-	serviceConfig.Privileged = container.Privileged
-	serviceConfig.StdinOpen = container.StdinOpen
-	serviceConfig.Sysctls = container.Sysctls
-	serviceConfig.Tty = container.Tty
-	serviceConfig.CPUShares = yaml.StringorInt(container.CpuShares)
-	serviceConfig.BlkioWeight = yaml.StringorInt(container.BlkioWeight)
-	serviceConfig.CgroupParent = container.CgroupParent
-	serviceConfig.CPUPeriod = yaml.StringorInt(container.CpuPeriod)
-	serviceConfig.CPUQuota = yaml.StringorInt(container.CpuQuota)
-	serviceConfig.DNSOpt = container.DnsOpt
-	serviceConfig.GroupAdd = container.GroupAdd
-	serviceConfig.ExtraHosts = container.ExtraHosts
-	serviceConfig.SecurityOpt = container.SecurityOpt
-	serviceConfig.ReadOnly = container.ReadOnly
-	serviceConfig.MemSwappiness = yaml.StringorInt(container.MemorySwappiness)
-	serviceConfig.MemSwapLimit = yaml.MemStringorInt(container.MemorySwap)
-	serviceConfig.OomKillDisable = container.OomKillDisable
-	serviceConfig.ShmSize = yaml.MemStringorInt(container.ShmSize)
-	serviceConfig.Uts = container.Uts
-	serviceConfig.StopSignal = container.StopSignal
-	serviceConfig.OomScoreAdj = yaml.StringorInt(container.OomScoreAdj)
-	serviceConfig.Ipc = container.IpcMode
-	serviceConfig.Isolation = container.Isolation
-	serviceConfig.VolumeDriver = container.VolumeDriver
-	serviceConfig.Expose = container.Expose
-	convertNetworkModeStandalone(serviceConfig, container)
-	serviceConfig.CPUSet = container.CpuSetCpu
-	serviceConfig.Labels = container.Labels
-	delete(serviceConfig.Labels, hashLabel)
-	serviceConfig.Pid = container.PidMode
-	serviceConfig.Devices = container.Devices
-	convertEnvironmentVariable(serviceConfig, container.Environment)
-	convertLogOptionsStandalone(serviceConfig, container)
-	convertTmpfsStandalone(serviceConfig, container)
-	convertUlimitStandalone(serviceConfig, container)
-	convertRestartPolicyStandalone(serviceConfig, container)
-	convertBlkioOptionsStandalone(serviceConfig, container)
-
+	convertDependsOn(serviceConfig, launchConfig)
 }
 
 func mergeRancherCompose(serviceConfig *config.ServiceConfig, service v3.Service, launchConfig v3.LaunchConfig, certMap map[string]v3.Certificate, serviceMap map[string]v3.Service, containerMap map[string]v3.Container) {
@@ -779,6 +723,24 @@ func convertLinks(serviceConfig *config.ServiceConfig, service v3.Service, stack
 			serviceConfig.Links = append(serviceConfig.Links, fmt.Sprintf("%s:%s", link.Alias, parts[1]))
 		} else {
 			serviceConfig.Links = append(serviceConfig.Links, fmt.Sprintf("%s:%s", link.Alias, link.Name))
+		}
+	}
+}
+
+func convertDependsOn(serviceConfig *config.ServiceConfig, launchConfig v3.LaunchConfig) {
+	for _, depend := range launchConfig.DependsOn {
+		name := ""
+		if depend.Service != "" {
+			name = depend.Service
+		}
+		if depend.Container != "" {
+			name = depend.Container
+		}
+		if name != "" {
+			if serviceConfig.DependsOn == nil {
+				serviceConfig.DependsOn = map[string]config.Dependency{}
+			}
+			serviceConfig.DependsOn[depend.Service] = config.Dependency{Condition: depend.Condition}
 		}
 	}
 }
