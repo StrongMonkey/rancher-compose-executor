@@ -21,6 +21,9 @@ func constructProject(stack *client.Stack, cluster *client.Cluster, opts client.
 	// TODO: don't create each time
 	opts.Url = fmt.Sprintf("%s/projects/%s/schemas", opts.Url, stack.AccountId)
 	rancherClient, err := client.NewRancherClient(&opts)
+	if err != nil {
+		return nil, err
+	}
 
 	templateVersion, err := loadTemplateVersion(stack, rancherClient)
 	if err != nil {
